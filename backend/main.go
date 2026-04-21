@@ -16,7 +16,7 @@ import (
 var cfg *config.Config
 
 func main() {
-	cfg = config.Load("/mnt/X-HUB/config.json")
+	cfg = config.Load("config.json")
 
 	database.Init(cfg)
 	database.InitSchema()
