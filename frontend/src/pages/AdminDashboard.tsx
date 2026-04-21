@@ -289,6 +289,11 @@ export default function AdminDashboard() {
         userNodesMap[id] = { alias: n.alias, host: n.host };
       });
       setUserNodes(userNodesMap);
+      // 自动选中第一个节点
+      const nodeIds = Object.keys(userNodesMap);
+      if (nodeIds.length > 0) {
+        openNodeDetail(nodeIds[0]);
+      }
       const statuses: Record<string, boolean> = {};
       for (const nodeId of Object.keys(userNodesMap)) {
         try {
