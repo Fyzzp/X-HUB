@@ -23,10 +23,11 @@ echo "[1/7] 检查依赖..."
 # 检查 Go
 if ! command -v go &> /dev/null; then
     echo "安装 Go..."
-    wget -q https://go.dev/dl/go1.21.6.linux-amd64.tar.gz
+    LATEST=$(curl -s https://go.dev/VERSION?m=text | head -1)
+    wget -q "https://go.dev/dl/${LATEST}.linux-amd64.tar.gz"
     rm -rf /usr/local/go
-    tar -C /usr/local -xzf go1.21.6.linux-amd64.tar.gz
-    rm go1.21.6.linux-amd64.tar.gz
+    tar -C /usr/local -xzf "${LATEST}.linux-amd64.tar.gz"
+    rm "${LATEST}.linux-amd64.tar.gz"
     export PATH=$PATH:/usr/local/go/bin
 fi
 
@@ -144,26 +145,69 @@ EOF
 
 echo "配置文件已生成: $SCRIPT_DIR/config.json"
 
-echo "[7/7] 构建后端..."
+# 创建软链接 (config.json 在 backend 目录)
+ln -sf "$SCRIPT_DIR/config.json" "$SCRIPT_DIR/backend/config.json"
+
+echo "[7/7] 构建后端并配置 systemd 服务..."
 
 cd "$SCRIPT_DIR/backend"
 go mod download
 go build -o xhub .
+
+# 创建 systemd 服务
+cat > /etc/systemd/system/xhub-backend.service << SVCEOF
+[Unit]
+Description=X-HUB Backend
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$SCRIPT_DIR/backend
+ExecStart=/bin/bash -c "cd $SCRIPT_DIR/backend && $SCRIPT_DIR/backend/xhub"
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+cat > /etc/systemd/system/xhub-frontend.service << SVCEOF
+[Unit]
+Description=X-HUB Frontend
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$SCRIPT_DIR/frontend
+ExecStart=/usr/bin/npm run preview -- --host 0.0.0.0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+systemctl daemon-reload
+systemctl enable xhub-backend xhub-frontend
+systemctl start xhub-backend xhub-frontend
 
 echo ""
 echo "=========================================="
 echo "         安装完成!"
 echo "=========================================="
 echo ""
-echo "配置文件: $SCRIPT_DIR/config.json"
+echo "服务已配置并启动:"
+echo "  xhub-backend  - 后端服务 (端口 $SERVER_PORT)"
+echo "  xhub-frontend - 前端服务 (端口 4173)"
 echo ""
-echo "启动后端:"
-echo "  cd $SCRIPT_DIR/backend"
-echo "  ./xhub"
+echo "管理命令:"
+echo "  systemctl start xhub-backend   # 启动后端"
+echo "  systemctl stop xhub-backend    # 停止后端"
+echo "  systemctl restart xhub-backend # 重启后端"
+echo "  systemctl status xhub-backend # 后端状态"
 echo ""
-echo "构建前端 (用于生产环境):"
-echo "  cd $SCRIPT_DIR/frontend"
-echo "  npm install"
-echo "  npm run build"
+echo "前端访问: http://服务器IP:4173"
 echo ""
 echo "=========================================="
