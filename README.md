@@ -23,7 +23,7 @@
 
 ```bash
 # 下载项目
-git clone https://github.com/你的用户名/X-HUB.git
+git clone https://github.com/Fyzzp/X-HUB.git
 cd X-HUB
 
 # 运行安装脚本
