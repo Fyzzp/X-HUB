@@ -69,6 +69,7 @@ echo ""
 echo "请配置数据库信息:"
 read -p "数据库用户名 [xhub]: " DB_USER
 DB_USER=${DB_USER:-xhub}
+DB_USER=$(echo "$DB_USER" | tr '[:upper:]' '[:lower:]')
 
 read -p "数据库密码: " DB_PASS
 while [ -z "$DB_PASS" ]; do
