@@ -315,8 +315,8 @@ func DeleteInbound(c *gin.Context) {
 		database.DB.Exec("DELETE FROM private_nodes WHERE id=$1", nodeID)
 		log.Printf("DEBUG: Delete completed for node id=%d", nodeID)
 		// B-05: Audit log - user delete node
-		log.Printf("DEBUG: About to log audit for node delete, userID=%d, IP=%s", userID, c.ClientIP())
-		database.LogAudit(userID, username, "user_delete_node", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"node_id": nodeID, "alias": nodeAlias, "url": nodeURL})
+		log.Printf("DEBUG: About to log audit for node delete, userID=%d, IP=%s", userID, getRealIP(c))
+		database.LogAudit(userID, username, "user_delete_node", getRealIP(c), c.GetHeader("User-Agent"), map[string]interface{}{"node_id": nodeID, "alias": nodeAlias, "url": nodeURL})
 		log.Printf("DEBUG: Audit log called")
 		c.JSON(http.StatusOK, gin.H{"success": true, "msg": "节点已删除"})
 		return

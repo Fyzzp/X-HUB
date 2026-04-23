@@ -39,7 +39,7 @@ func SavePrivateNode(c *gin.Context) {
 	nodeID, _ := result.LastInsertId()
 	var username string
 	database.DB.QueryRow("SELECT username FROM users WHERE id=$1", userID).Scan(&username)
-	database.LogAudit(userID, username, "create_node", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"node_id": nodeID, "alias": node.Alias, "url": node.URL})
+	database.LogAudit(userID, username, "create_node", getRealIP(c), c.GetHeader("User-Agent"), map[string]interface{}{"node_id": nodeID, "alias": node.Alias, "url": node.URL})
 	c.JSON(http.StatusOK, gin.H{"success": true, "msg": "节点已保存"})
 }
 
@@ -181,7 +181,7 @@ func AdminAction(c *gin.Context) {
 		database.DB.Exec("DELETE FROM private_nodes WHERE user_id=$1", req.ID)
 		database.DB.Exec("DELETE FROM users WHERE id=$1", req.ID)
 		// B-05: Audit log - admin delete user
-		database.LogAudit(userID, adminUsername, "admin_delete_user", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"target_user_id": req.ID, "target_username": targetUsername})
+		database.LogAudit(userID, adminUsername, "admin_delete_user", getRealIP(c), c.GetHeader("User-Agent"), map[string]interface{}{"target_user_id": req.ID, "target_username": targetUsername})
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "用户已删除"})
 	} else if req.Action == "delete_node" {
 		// Get node info before deletion for audit log
@@ -190,7 +190,7 @@ func AdminAction(c *gin.Context) {
 
 		database.DB.Exec("DELETE FROM private_nodes WHERE id=$1", req.ID)
 		// B-05: Audit log - admin delete node
-		database.LogAudit(userID, adminUsername, "admin_delete_node", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"node_id": req.ID, "alias": nodeAlias, "url": nodeURL})
+		database.LogAudit(userID, adminUsername, "admin_delete_node", getRealIP(c), c.GetHeader("User-Agent"), map[string]interface{}{"node_id": req.ID, "alias": nodeAlias, "url": nodeURL})
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "节点已删除"})
 	} else {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "msg": "未知操作"})

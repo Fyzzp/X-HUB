@@ -23,6 +23,14 @@ import (
 )
 
 var allowRegister = true
+// getRealIP returns real client IP, preferring CF-Connecting-IP header
+func getRealIP(c *gin.Context) string {
+	if cfIP := c.GetHeader("CF-Connecting-IP"); cfIP != "" {
+		return cfIP
+	}
+	return c.ClientIP()
+}
+
 
 const allowRegisterPath = "/mnt/X-HUB/allow_register.txt"
 
@@ -265,13 +273,13 @@ func Register(c *gin.Context) {
 		return
 	}
 	// B-05: Audit log - successful registration
-	database.LogAudit(userID, req.Username, "register", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"email": req.Email})
+	database.LogAudit(userID, req.Username, "register", getRealIP(c), c.GetHeader("User-Agent"), map[string]interface{}{"email": req.Email})
 	c.JSON(http.StatusOK, gin.H{"success": true, "msg": "注册成功"})
 }
 
 func Login(c *gin.Context) {
 	// S-05: API限流 - 5次/分钟
-	clientIP := c.ClientIP()
+	clientIP := getRealIP(c)
 	key := "ratelimit:login:" + clientIP
 	ctx := context.Background()
 	count, _ := cache.Client.Incr(ctx, key).Result()
@@ -294,13 +302,13 @@ func Login(c *gin.Context) {
 	err := database.DB.QueryRow("SELECT id, password_hash, COALESCE(enabled, true) FROM users WHERE username=$1", req.Username).Scan(&id, &hash, &enabled)
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)) != nil {
 		// B-05: Audit log - failed login
-		database.LogAudit(0, req.Username, "login_failed", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"reason": "invalid_credentials"})
+		database.LogAudit(0, req.Username, "login_failed", getRealIP(c), c.GetHeader("User-Agent"), map[string]interface{}{"reason": "invalid_credentials"})
 		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "msg": "账号或密码错误"})
 		return
 	}
 	if !enabled {
 		// B-05: Audit log - disabled account login attempt
-		database.LogAudit(id, req.Username, "login_failed", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"reason": "account_disabled"})
+		database.LogAudit(id, req.Username, "login_failed", getRealIP(c), c.GetHeader("User-Agent"), map[string]interface{}{"reason": "account_disabled"})
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "msg": "您的账户已被禁用，请联系管理员"})
 		return
 	}
@@ -311,7 +319,7 @@ func Login(c *gin.Context) {
 	// S-04: Cookie安全属性 (Secure=true, HttpOnly=true)
 	c.SetCookie("session_token", token, 7*24*3600, "/", "", true, true)
 	// B-05: Audit log - successful login
-	database.LogAudit(id, req.Username, "login_success", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"method": "password"})
+	database.LogAudit(id, req.Username, "login_success", getRealIP(c), c.GetHeader("User-Agent"), map[string]interface{}{"method": "password"})
 	c.JSON(http.StatusOK, gin.H{"success": true, "msg": "登录成功"})
 }
 func Logout(c *gin.Context) {
@@ -323,7 +331,7 @@ func Logout(c *gin.Context) {
 		cache.Del("session:" + token)
 	}
 	// B-05: Audit log - logout
-	database.LogAudit(userID, username, "logout", c.ClientIP(), c.GetHeader("User-Agent"), nil)
+	database.LogAudit(userID, username, "logout", getRealIP(c), c.GetHeader("User-Agent"), nil)
 	c.SetCookie("session_token", "", -1, "/", "", false, true)
 	c.JSON(http.StatusOK, gin.H{"success": true, "msg": "注销成功"})
 }
@@ -355,7 +363,7 @@ func ToggleRegister(c *gin.Context) {
 		msg = "注册功能已关闭"
 	}
 	// B-05: Audit log - admin toggle register
-	database.LogAudit(userID, username, "admin_toggle_register", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"enabled": req.Enabled})
+	database.LogAudit(userID, username, "admin_toggle_register", getRealIP(c), c.GetHeader("User-Agent"), map[string]interface{}{"enabled": req.Enabled})
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": msg})
 }
 
@@ -389,7 +397,7 @@ func ToggleUserEnabled(c *gin.Context) {
 		cache.Del("session:" + strconv.Itoa(req.UserID))
 	}
 	// B-05: Audit log - admin toggle user enabled
-	database.LogAudit(adminID, adminUsername, "admin_toggle_user", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"target_user_id": req.UserID, "target_username": targetUsername, "enabled": req.Enabled})
+	database.LogAudit(adminID, adminUsername, "admin_toggle_user", getRealIP(c), c.GetHeader("User-Agent"), map[string]interface{}{"target_user_id": req.UserID, "target_username": targetUsername, "enabled": req.Enabled})
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "操作成功"})
 }
 
