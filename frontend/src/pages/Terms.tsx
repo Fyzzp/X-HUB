@@ -23,7 +23,7 @@ export default function Terms() {
             <p>如对本协议有任何疑问，请通过邮件与我们联系。</p>
           </div>
           <div className="mt-6 text-center">
-            <button onClick={() => window.close()} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-semibold transition-colors">
+            <button onClick={() => window.history.back()} className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-semibold transition-colors">
               关闭页面
             </button>
           </div>
