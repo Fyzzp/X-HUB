@@ -47,6 +47,17 @@ chmod +x install.sh
 ./install.sh
 ```
 
+
+### 方式二：纯 Bash 安装（无需 Git）
+
+下载项目压缩包到服务器后解压，直接运行安装脚本：
+
+```bash
+tar -xzf X-HUB.tar.gz
+cd X-HUB
+chmod +x install.sh
+./install.sh
+```
 ## 配置说明
 
 安装后，编辑 `config.json`：
