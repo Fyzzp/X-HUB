@@ -154,14 +154,38 @@ export default function AdminDashboard() {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditActionFilter, setAuditActionFilter] = useState<string>("");
+  const [auditDateFrom, setAuditDateFrom] = useState<string>("");
+  const [auditDateTo, setAuditDateTo] = useState<string>("");
   const [showClearAuditModal, setShowClearAuditModal] = useState(false);
   const [clearAuditLoading, setClearAuditLoading] = useState(false);
 
-  const fetchAuditLogs = async (page: number = auditPage) => {
+  const actionLabelMap: Record<string, { label: string; color: string }> = {
+  register: { label: "注册", color: "bg-blue-100 text-blue-700" },
+  login_success: { label: "登录成功", color: "bg-green-100 text-green-700" },
+  login_failed: { label: "登录失败", color: "bg-red-100 text-red-700" },
+  logout: { label: "注销", color: "bg-slate-100 text-slate-700" },
+  create_node: { label: "创建节点", color: "bg-purple-100 text-purple-700" },
+  delete_node: { label: "删除节点", color: "bg-red-100 text-red-700" },
+  admin_toggle_register: { label: "开关注册", color: "bg-orange-100 text-orange-700" },
+  admin_toggle_user: { label: "禁用用户", color: "bg-orange-100 text-orange-700" },
+  admin_delete_user: { label: "删除用户", color: "bg-red-100 text-red-700" },
+  admin_delete_node: { label: "删除节点(管理)", color: "bg-red-100 text-red-700" },
+  user_delete_node: { label: "删除节点(用户)", color: "bg-orange-100 text-orange-700" },
+};
+
+const formatAuditTime = (ts: string) => {
+  if (!ts) return "-";
+  const d = new Date(ts);
+  return d.toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+};
+
+const fetchAuditLogs = async (page: number = auditPage) => {
     setAuditLoading(true);
     try {
       const params: any = { page: page, page_size: auditPageSize };
       if (auditActionFilter) params.action = auditActionFilter;
+      if (auditDateFrom) params.date_from = auditDateFrom;
+      if (auditDateTo) params.date_to = auditDateTo;
       const res = await adminApi.getAuditLogs(params);
       if (res.code === 0 && res.data) {
         setAuditLogs(res.data.logs || []);
@@ -886,7 +910,13 @@ export default function AdminDashboard() {
                   {/* Filters */}
                   <div className="flex flex-wrap items-center gap-3 p-4 bg-slate-50 rounded-xl flex-shrink-0">
                     <div className="flex items-center gap-2">
-                      <label className="text-sm text-slate-600">操作类型:</label>
+                      <label className="text-sm text-slate-600">日期:</label>
+                        <input type="date" value={auditDateFrom} onChange={(e) => { setAuditDateFrom(e.target.value); setAuditPage(1); }} className="px-2 py-1 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-32" />
+                        <span className="text-slate-400">至</span>
+                        <input type="date" value={auditDateTo} onChange={(e) => { setAuditDateTo(e.target.value); setAuditPage(1); }} className="px-2 py-1 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-32" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-slate-600">操作类型:</label>
                       <select
                         value={auditActionFilter}
                         onChange={(e) => { setAuditActionFilter(e.target.value); setAuditPage(1); }}
@@ -986,30 +1016,23 @@ export default function AdminDashboard() {
                         ) : (
                           auditLogs.map((log: any) => (
                             <tr key={log.id} className="border-b border-slate-100 hover:bg-slate-50">
-                              <td className="py-3 px-4 text-slate-600">{log.created_at}</td>
+                              <td className="py-3 px-4 text-slate-600 text-xs">{formatAuditTime(log.created_at)}</td>
                               <td className="py-3 px-4">
                                 <span className="font-medium text-slate-800">{log.username || "-"}</span>
                                 {log.user_id > 0 && <span className="text-slate-400 text-xs ml-1">(#{log.user_id})</span>}
                               </td>
                               <td className="py-3 px-4">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                  log.action === "login_success" ? "bg-green-100 text-green-700" :
-                                  log.action === "login_failed" ? "bg-red-100 text-red-700" :
-                                  log.action === "register" ? "bg-blue-100 text-blue-700" :
-                                  log.action === "logout" ? "bg-slate-100 text-slate-700" :
-                                  log.action === "create_node" ? "bg-purple-100 text-purple-700" :
-                                  log.action.includes("admin") ? "bg-orange-100 text-orange-700" :
-                                  "bg-slate-100 text-slate-700"
-                                }`}>
-                                  {log.action}
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${actionLabelMap[log.action]?.color || "bg-slate-100 text-slate-700"}`}>
+                                  {actionLabelMap[log.action]?.label || log.action}
                                 </span>
                               </td>
-                              <td className="py-3 px-4 text-slate-600 font-mono text-xs">{log.ip || "-"}</td>
+                              <td className="py-3 px-4"><span title={log.ip || "-"} className="font-mono text-xs text-slate-600 cursor-help">{log.ip ? (log.ip.length > 15 ? log.ip.slice(0,12) + "..." : log.ip) : "-"}</span></td>
                               <td className="py-3 px-4 text-slate-600 text-xs">
                                 {log.details ? (
-                                  <pre className="bg-slate-100 rounded p-1 text-xs overflow-x-auto max-w-xs">
-                                    {JSON.stringify(log.details, null, 2)}
-                                  </pre>
+                                  <details className="group">
+                                    <summary className="cursor-pointer text-blue-600 hover:text-blue-800 text-xs list-none">查看详情</summary>
+                                    <pre className="mt-1 bg-slate-100 rounded p-1 text-xs overflow-x-auto max-w-xs text-slate-600">{JSON.stringify(log.details, null, 2)}</pre>
+                                  </details>
                                 ) : "-"}
                               </td>
                             </tr>
