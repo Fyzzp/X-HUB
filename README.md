@@ -38,11 +38,11 @@
 ## 一键部署
 
 ```bash
-# 克隆项目
+# 方式一：Git 克隆
 git clone https://github.com/Fyzzp/X-HUB.git
 cd X-HUB
 
-# 运行部署脚本
+# 运行安装脚本
 chmod +x install.sh
 ./install.sh
 ```
