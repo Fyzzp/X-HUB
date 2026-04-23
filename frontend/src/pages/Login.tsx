@@ -352,6 +352,11 @@ export default function Login() {
                   已有账号?<button onClick={() => { setTab("login"); setError(""); setFieldError({}); setCodeSent(false) }} className="text-blue-500 hover:text-blue-700 font-semibold ml-1 transition-colors">去登录</button>
                 </p>
               )}
+              <div className="flex items-center justify-center gap-4 mt-3 text-xs text-slate-400">
+                <button onClick={() => navigate("/terms")} className="hover:text-blue-500 transition-colors">用户协议</button>
+                <span>|</span>
+                <button onClick={() => navigate("/privacy")} className="hover:text-blue-500 transition-colors">隐私政策</button>
+              </div>
             </div>
           </div>
         </div>
