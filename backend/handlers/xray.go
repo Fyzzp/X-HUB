@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -16,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"xhub/crypto"
 
 	"github.com/gin-gonic/gin"
 	"xhub/cache"
@@ -39,22 +42,34 @@ func resolveNode(userID int, nodeID string) (models.NodeConfig, error) {
 	if strings.HasPrefix(nodeID, "private|") {
 		dbID := strings.TrimPrefix(nodeID, "private|")
 		var n models.NodeConfig
+		var encryptedPass string
 		err := database.DB.QueryRow(
 			"SELECT url, base_path, panel_user, panel_pass FROM private_nodes WHERE id=$1 AND user_id=$2",
 			dbID, userID,
-		).Scan(&n.URL, &n.BasePath, &n.Username, &n.Password)
-		return n, err
+		).Scan(&n.URL, &n.BasePath, &n.Username, &encryptedPass)
+		if err != nil {
+			return n, err
+		}
+		// S-03: Decrypt panel password for PanelRequest
+		n.Password, _ = crypto.Decrypt(encryptedPass)
+		return n, nil
 	}
 	return models.NodeConfig{}, fmt.Errorf("无效的节点标识")
 }
 
 func resolveNodeByID(userID int, dbID int) (models.NodeConfig, error) {
 	var n models.NodeConfig
+	var encryptedPass string
 	err := database.DB.QueryRow(
 		"SELECT url, base_path, panel_user, panel_pass FROM private_nodes WHERE id=$1 AND user_id=$2",
 		dbID, userID,
-	).Scan(&n.URL, &n.BasePath, &n.Username, &n.Password)
-	return n, err
+	).Scan(&n.URL, &n.BasePath, &n.Username, &encryptedPass)
+	if err != nil {
+		return n, err
+	}
+	// S-03: Decrypt panel password for PanelRequest
+	n.Password, _ = crypto.Decrypt(encryptedPass)
+	return n, nil
 }
 
 func PanelRequest(node models.NodeConfig, path, method, contentType string, body []byte) ([]byte, error) {
@@ -65,7 +80,7 @@ func PanelRequest(node models.NodeConfig, path, method, contentType string, body
 		jar, _ := cookiejar.New(nil)
 		client = &http.Client{
 			Jar: jar,
-			Timeout: 15 * time.Second,
+			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			},
@@ -94,7 +109,8 @@ func PanelRequest(node models.NodeConfig, path, method, contentType string, body
 
 	bodyStr := string(resBody)
 	if resp.StatusCode != 200 || !strings.HasPrefix(strings.TrimSpace(bodyStr), "{") || strings.Contains(bodyStr, `"success":false`) {
-		loginReq, _ := http.NewRequest("POST", node.URL+node.BasePath+"/login",
+		log.Printf("DEBUG PanelRequest login: user=%s, pass=%s, url=%s", node.Username, node.Password, node.URL+node.BasePath)
+	loginReq, _ := http.NewRequest("POST", node.URL+node.BasePath+"/login",
 			strings.NewReader(url.Values{"username": {node.Username}, "password": {node.Password}}.Encode()))
 		loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		if loginResp, _ := client.Do(loginReq); loginResp != nil {
@@ -109,6 +125,51 @@ func PanelRequest(node models.NodeConfig, path, method, contentType string, body
 		resp.Body.Close()
 	}
 	return resBody, nil
+}
+
+// Test panel connectivity before saving node (with short timeout)
+func TestNodeConnection(c *gin.Context) {
+	var req struct {
+		URL      string `json:"url"`
+		BasePath string `json:"base_path"`
+		User     string `json:"user"`
+		Pass     string `json:"pass"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "msg": "参数错误"})
+		return
+	}
+
+	// Use dedicated client with 3 second timeout
+	testClient := &http.Client{
+		Timeout: 3 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	// Try to login
+	loginReq, _ := http.NewRequest("POST", req.URL+req.BasePath+"/login",
+		strings.NewReader(url.Values{"username": {req.User}, "password": {req.Pass}}.Encode()))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginReq.Header.Set("X-Requested-With", "XMLHttpRequest")
+
+	resp, err := testClient.Do(loginReq)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "msg": "连接超时（3秒），请检查地址是否正确"})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+
+	// 3x-ui returns {"success": true} on successful login
+	if strings.Contains(bodyStr, `"success":true`) {
+		c.JSON(http.StatusOK, gin.H{"success": true, "msg": "连接成功"})
+	} else {
+		c.JSON(http.StatusOK, gin.H{"success": false, "msg": "登录失败：请检查用户名密码"})
+	}
 }
 
 func GetNodeInbounds(c *gin.Context) {
@@ -235,7 +296,29 @@ func DeleteInbound(c *gin.Context) {
 
 	node, err := resolveNode(userID, req.NodeID)
 	if err != nil {
+		log.Printf("DEBUG: resolveNode failed for NodeID=%s, userID=%d, err=%v", req.NodeID, userID, err)
 		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "msg": err.Error()})
+		return
+	}
+	log.Printf("DEBUG: resolveNode success for NodeID=%s, userID=%d", req.NodeID, userID)
+
+	// Special case: inbound_id == 0 means delete the entire node (private_nodes record)
+	if req.InboundID == 0 {
+		// NodeID format is "private|X", extract the numeric part
+		nodeIDStr := strings.Split(req.NodeID, "|")
+		nodeID, _ := strconv.Atoi(nodeIDStr[len(nodeIDStr)-1])
+		// Get node info and username for audit log before deletion
+		var nodeAlias, nodeURL, username string
+		database.DB.QueryRow("SELECT alias_name, url FROM private_nodes WHERE id=$1", nodeID).Scan(&nodeAlias, &nodeURL)
+		database.DB.QueryRow("SELECT username FROM users WHERE id=$1", userID).Scan(&username)
+		log.Printf("DEBUG: Deleting node id=%d, NodeID=%s, userID=%d", nodeID, req.NodeID, userID)
+		database.DB.Exec("DELETE FROM private_nodes WHERE id=$1", nodeID)
+		log.Printf("DEBUG: Delete completed for node id=%d", nodeID)
+		// B-05: Audit log - user delete node
+		log.Printf("DEBUG: About to log audit for node delete, userID=%d, IP=%s", userID, c.ClientIP())
+		database.LogAudit(userID, username, "user_delete_node", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"node_id": nodeID, "alias": nodeAlias, "url": nodeURL})
+		log.Printf("DEBUG: Audit log called")
+		c.JSON(http.StatusOK, gin.H{"success": true, "msg": "节点已删除"})
 		return
 	}
 
@@ -258,6 +341,31 @@ func DeleteInbound(c *gin.Context) {
 	} else if len(req.TagsToDelete) > 0 {
 		emailsToClean = req.TagsToDelete
 	} else {
+		// Delete entire inbound - collect all client emails FIRST before deletion
+		inboundsRes, err := PanelRequest(node, "/panel/api/inbounds/list", "GET", "", nil)
+		if err == nil && len(inboundsRes) > 0 {
+			var inboundsResult map[string]interface{}
+			if json.Unmarshal(inboundsRes, &inboundsResult) == nil {
+				if inbounds, ok := inboundsResult["obj"].([]interface{}); ok {
+					for _, ib := range inbounds {
+						if ibMap, ok := ib.(map[string]interface{}); ok {
+							if ibId, ok := ibMap["id"].(float64); ok && int(ibId) == req.InboundID {
+								if clientStats, ok := ibMap["clientStats"].([]interface{}); ok {
+									for _, cs := range clientStats {
+										if csm, ok := cs.(map[string]interface{}); ok {
+											if email, ok := csm["email"].(string); ok && email != "" {
+												emailsToClean = append(emailsToClean, email)
+											}
+										}
+									}
+								}
+								break
+							}
+						}
+					}
+				}
+			}
+		}
 		PanelRequest(node, fmt.Sprintf("/panel/api/inbounds/del/%d", req.InboundID), "POST", "", nil)
 	}
 
@@ -612,7 +720,8 @@ func DeploySocks5(c *gin.Context) {
 		newInboundJSON, _ := json.Marshal(newInbound)
 		resp, err := PanelRequest(node, "/panel/api/inbounds/add", "POST", "application/json", newInboundJSON)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "msg": "创建入站失败"})
+			log.Printf("DEBUG DeploySocks5: inbound_id=%d, resp=: %v\nresp: %s", err, resp)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "msg": "创建入站失败: " + err.Error()})
 			return
 		}
 		var addResp struct {
@@ -624,7 +733,8 @@ func DeploySocks5(c *gin.Context) {
 		}
 		json.Unmarshal(resp, &addResp)
 		if !addResp.Success || addResp.Obj.ID == 0 {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "msg": "创建入站失败: " + addResp.Msg})
+			log.Printf("DEBUG DeploySocks5 failed: msg=%s, resp=%s", addResp.Msg, string(resp))
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "msg": "创建入站失败: " + addResp.Msg})
 			return
 		}
 		newInboundID := addResp.Obj.ID
@@ -708,7 +818,12 @@ func parseSocks5List(socks5List string) []map[string]string {
 func generateUUID() string {
 	bytes := make([]byte, 16)
 	rand.Read(bytes)
-	return hex.EncodeToString(bytes)
+	// Set version to 0100 (v4)
+	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	// Set variant to 10xx
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%04x%08x",
+		bytes[0:4], bytes[4:6], bytes[6:8], bytes[8:10], bytes[10:12], bytes[12:16])
 }
 
 func generateSubID() string {

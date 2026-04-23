@@ -89,6 +89,8 @@ export const api = {
   getNodeStatus: (nodeId: string) => request(`/nodes/status?node_id=${nodeId}`),
   getSubscription: (nodeId: string) => request(`/subscription/${nodeId}`),
   saveNode: (node: any) => request("/nodes/save", { method: "POST", body: JSON.stringify(node) }),
+  checkNodeDuplicate: (url: string) => request("/nodes/check_duplicate", { method: "POST", body: JSON.stringify({ url }) }),
+  testNodeConnection: (data: {url: string, base_path: string, user: string, pass: string}) => request("/nodes/test_connection", { method: "POST", body: JSON.stringify(data) }),
   deploy: (data: any) => request("/deploy", { method: "POST", body: JSON.stringify(data) }),
   deploySocks5: (data: {
     node_id: string
@@ -121,6 +123,20 @@ export const adminApi = {
 
   getUserNodes: (userId: number) => {
     return request(`/admin/user/${userId}/nodes`);
+  },
+
+  getAuditLogs: (params?: { page?: number; page_size?: number; action?: string; user_id?: number }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set("page", String(params.page));
+    if (params?.page_size) searchParams.set("page_size", String(params.page_size));
+    if (params?.action) searchParams.set("action", params.action);
+    if (params?.user_id) searchParams.set("user_id", String(params.user_id));
+    const query = searchParams.toString();
+    return request(`/admin/audit_logs${query ? `?${query}` : ""}`);
+  },
+
+  clearAuditLogs: (days: number = 0) => {
+    return request("/admin/audit_logs/clear", { method: "POST", body: JSON.stringify({ days }) });
   },
 }
 

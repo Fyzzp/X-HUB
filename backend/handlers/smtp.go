@@ -49,7 +49,7 @@ func SendTestEmail(to, code string) error {
 		return fmt.Errorf("SMTP not enabled")
 	}
 
-	subject := "您的 3X-UI 注册验证码"
+	subject := "您的 X-HUB 注册验证码"
 	body := fmt.Sprintf("您的验证码是：%s，10分钟内有效。", code)
 
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
@@ -82,7 +82,7 @@ func sendEmail(to, code string) {
 		return
 	}
 
-	subject := "您的 3X-UI 注册验证码"
+	subject := "您的 X-HUB 注册验证码"
 	body := fmt.Sprintf("您的验证码是：%s，10分钟内有效。", code)
 
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",

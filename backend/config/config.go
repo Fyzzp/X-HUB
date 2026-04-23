@@ -32,6 +32,7 @@ type Config struct {
 		Password string `json:"password"`
 		From     string `json:"from"`
 	} `json:"smtp"`
+	AESKey string `json:"aes_key"`
 }
 
 func Load(path string) *Config {
@@ -48,5 +49,20 @@ func Load(path string) *Config {
 	cfg.Cache.Host = "127.0.0.1"
 	cfg.Cache.Port = 6379
 	_ = json.Unmarshal(data, &cfg)
+
+	// S-02: Override with environment variables (secrets should come from env)
+	if dbPass := os.Getenv("DB_PASSWORD"); dbPass != "" {
+		cfg.Database.Password = dbPass
+	}
+	if redisPass := os.Getenv("REDIS_PASSWORD"); redisPass != "" {
+		cfg.Cache.Password = redisPass
+	}
+	if smtpPass := os.Getenv("SMTP_PASSWORD"); smtpPass != "" {
+		cfg.SMTP.Password = smtpPass
+	}
+	if aesKey := os.Getenv("AES_KEY"); aesKey != "" {
+		cfg.AESKey = aesKey
+	}
+
 	return &cfg
 }

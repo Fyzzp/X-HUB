@@ -33,3 +33,11 @@ allow_register.txt
 
 # Database (contains data)
 *.db
+
+# Certificates (contains sensitive data)
+Cert/
+
+# Backup files
+*.bak
+*.tar.gz
+backup/

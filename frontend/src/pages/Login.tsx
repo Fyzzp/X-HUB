@@ -206,7 +206,7 @@ export default function Login() {
         <div className="absolute inset-0 bg-gradient-to-br from-blue-200/60 via-indigo-100/40 to-purple-100/30" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-blue-400/10 to-purple-400/10 rounded-full blur-3xl" />
         <div className="relative z-10 text-center px-12">
-          <div className="w-24 h-24 bg-blue-500 rounded-[22px] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-blue-500/40 ring-8 ring-white/50">
+          <div className="w-24 h-24 bg-blue-500 rounded-[22px] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-blue-600/40 ring-8 ring-white/50">
             <svg width="44" height="44" viewBox="0 0 24 24" fill="none">
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -219,7 +219,7 @@ export default function Login() {
       <div className="w-full lg:w-1/2 flex items-center justify-center bg-white px-6 py-12">
         <div className="w-full max-w-md">
           <div className="lg:hidden text-center mb-10">
-            <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-xl shadow-blue-500/30 ring-4 ring-white/80">
+            <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-xl shadow-blue-600/30 ring-4 ring-white/80">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
@@ -336,7 +336,7 @@ export default function Login() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-500 hover:bg-blue-600 text-white h-12 rounded-xl font-semibold shadow-lg shadow-blue-500/30 disabled:opacity-50 transition-all text-sm"
+                className="w-full bg-blue-500 hover:bg-blue-600 text-white h-12 rounded-xl font-semibold shadow-lg shadow-blue-600/30 disabled:opacity-50 transition-all text-sm"
               >
                 {loading ? "处理中..." : (tab === "login" ? "登录" : "注册")}
               </Button>
@@ -443,7 +443,7 @@ export default function Login() {
                 <Button
                   type="submit"
                   disabled={forgotLoading}
-                  className="w-full bg-blue-500 hover:bg-blue-600 text-white h-12 rounded-xl font-semibold shadow-lg shadow-blue-500/30 disabled:opacity-50 transition-all text-sm"
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white h-12 rounded-xl font-semibold shadow-lg shadow-blue-600/30 disabled:opacity-50 transition-all text-sm"
                 >
                   {forgotLoading ? "处理中..." : "重置密码"}
                 </Button>

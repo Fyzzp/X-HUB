@@ -1,13 +1,19 @@
 package main
 
 import (
+	"context"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"xhub/cache"
 	"xhub/config"
+	"xhub/crypto"
 	"xhub/database"
 	"xhub/handlers"
 	"xhub/middleware"
@@ -22,6 +28,11 @@ func main() {
 	database.InitSchema()
 
 	cache.Init(cfg)
+
+	// S-03: Initialize AES key for panel password encryption
+	if err := crypto.InitKey(cfg.AESKey); err != nil {
+		log.Printf("Warning: AES key initialization failed: %v", err)
+	}
 
 	if cfg.SMTP.Enabled {
 		handlers.SetSMTP(handlers.SMTPConfig{
@@ -39,17 +50,19 @@ func main() {
 
 	r.POST("/api/auth/register", handlers.Register)
 	r.POST("/api/auth/login", handlers.Login)
-	r.POST("/api/auth/logout", handlers.Logout)
+	r.POST("/api/auth/logout", middleware.AuthRequired(), handlers.Logout)
 	r.GET("/api/auth/me", middleware.AuthRequired(), handlers.Me)
 	r.POST("/api/auth/send_code", handlers.SendVerifyCode)
 	r.POST("/api/auth/send_reset_code", handlers.SendResetCode)
 	r.POST("/api/auth/reset_password", handlers.ResetPassword)
-	r.GET("/api/register/status", handlers.GetRegisterStatusPublic)
+	r.GET("/register/status", handlers.GetRegisterStatusPublic)
 
 	nodeRoutes := r.Group("/api")
 	nodeRoutes.Use(middleware.AuthRequired())
 	{
 		nodeRoutes.POST("/nodes/save", handlers.SavePrivateNode)
+	nodeRoutes.POST("/nodes/check_duplicate", handlers.CheckNodeDuplicate)
+	nodeRoutes.POST("/nodes/test_connection", handlers.TestNodeConnection)
 		nodeRoutes.GET("/nodes", handlers.GetNodes)
 		nodeRoutes.GET("/inbounds", handlers.GetInbounds)
 		nodeRoutes.POST("/inbounds", handlers.GetInbounds)
@@ -72,6 +85,8 @@ func main() {
 		adminRoutes.POST("/toggle_register", handlers.ToggleRegister)
 		adminRoutes.GET("/user/:userId/nodes", handlers.GetUserNodes)
 		adminRoutes.POST("/toggle_user", handlers.ToggleUserEnabled)
+		adminRoutes.GET("/audit_logs", handlers.GetAuditLogs)
+		adminRoutes.POST("/audit_logs/clear", handlers.ClearAuditLogs)
 	}
 
 	r.GET("/health", func(c *gin.Context) {
@@ -86,10 +101,34 @@ func main() {
 	if !strings.Contains(addr, ":") {
 		addr = ":" + addr
 	}
-	log.Printf("Server starting on %s", addr)
-	if err := r.Run(addr); err != nil {
-		log.Fatal("Server failed:", err)
+
+	// P-08: Graceful Shutdown
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: r,
 	}
+
+	go func() {
+		log.Printf("Server starting on %s", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	log.Println("Server exited properly")
 }
 
 func startBackgroundPolling() {

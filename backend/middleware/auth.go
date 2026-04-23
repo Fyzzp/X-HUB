@@ -9,6 +9,10 @@ import (
 	"xhub/cache"
 )
 
+var trustedOrigins = []string{
+	"https://room.pppoe.one",
+}
+
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := c.Cookie("session_token")
@@ -55,10 +59,29 @@ func AdminRequired() gin.HandlerFunc {
 	}
 }
 
+// S-08: CORS middleware with trusted origin validation
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		origin := c.GetHeader("Origin")
+		if origin == "" {
+			origin = c.GetHeader("Referer")
+		}
+
+		// If origin is present, validate it
+		if origin != "" {
+			trusted := false
+			for _, allowed := range trustedOrigins {
+				if len(origin) >= len(allowed) && origin[:len(allowed)] == allowed {
+					trusted = true
+					break
+				}
+			}
+			if trusted {
+				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+				c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+		}
+
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Authorization, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		if c.Request.Method == "OPTIONS" {

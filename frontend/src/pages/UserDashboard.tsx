@@ -85,8 +85,22 @@ export default function UserDashboard() {
   const navigate = useNavigate()
   const [user, setUser] = useState<{ username: string; is_admin: boolean } | null>(null)
   const [nodes, setNodes] = useState<Record<string, { alias: string; host: string }>>({})
-  const [showAdd, setShowAdd] = useState(false)
-  const [showDeploy, setShowDeploy] = useState(false)
+  // Tab状态持久化 - 刷新页面记住当前Tab
+  const getSavedTab = () => {
+    const saved = localStorage.getItem('userTab')
+    if (saved === 'add') return { showAdd: true, showDeploy: false }
+    if (saved === 'deploy') return { showAdd: false, showDeploy: true }
+    return { showAdd: false, showDeploy: false }
+  }
+  const [showAdd, setShowAdd] = useState(() => getSavedTab().showAdd)
+  const [showDeploy, setShowDeploy] = useState(() => getSavedTab().showDeploy)
+
+  // 监听Tab变化自动保存到localStorage
+  useEffect(() => {
+    if (showAdd) localStorage.setItem('userTab', 'add')
+    else if (showDeploy) localStorage.setItem('userTab', 'deploy')
+    else localStorage.setItem('userTab', 'nodes')
+  }, [showAdd, showDeploy])
   const [deployNode, setDeployNode] = useState("")
   const [deployInbound, setDeployInbound] = useState("")
   const [deployInbounds, setDeployInbounds] = useState<{id: number; remark: string; protocol: string}[]>([])
@@ -96,6 +110,9 @@ export default function UserDashboard() {
   const [deployTagPrefix, setDeployTagPrefix] = useState("")
   const [deployStartNumber, setDeployStartNumber] = useState("1")
   const [newNode, setNewNode] = useState({ alias: "", url: "", base_path: "", user: "", pass: "" })
+  const [clipToast, setClipToast] = useState<{show: boolean, type: 'success' | 'error', message: string}>({show: false, type: 'success', message: ''})
+  const [deployToast, setDeployToast] = useState<{show: boolean, type: 'success' | 'error', message: string}>({show: false, type: 'success', message: ''})
+  const [savingNode, setSavingNode] = useState(false)
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
 
@@ -295,7 +312,11 @@ export default function UserDashboard() {
         order: deployOrder
       })
       if (result.success) {
-        alert(result.msg || "部署成功")
+        setDeployToast({
+          show: true,
+          type: 'success',
+          message: '🚀 ' + (result.msg || '部署成功！') + '\n\n已成功部署 ' + socks5List.split('\n').filter(l => l.trim()).length + ' 个 SOCKS5 账号'
+        })
         setSocks5List("")
         setDeployTagPrefix("")
         setDeployStartNumber("1")
@@ -304,7 +325,11 @@ export default function UserDashboard() {
           loadDeployInbounds(deployNode)
         }
       } else {
-        alert(result.msg || "部署失败")
+        setDeployToast({
+          show: true,
+          type: 'error',
+          message: '❌ 部署失败：' + (result.msg || '未知错误')
+        })
       }
     } catch (e: any) {
       alert(e.message || "部署失败")
@@ -313,12 +338,57 @@ export default function UserDashboard() {
 
   const handleSaveNode = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSavingNode(true)
     try {
+      // 1. Check for duplicate IP
+      const dupRes = await api.checkNodeDuplicate(newNode.url)
+      if (dupRes.duplicate) {
+        setClipToast({
+          show: true,
+          type: 'error',
+          message: '⚠️ 该节点已添加\n\n检测到您已添加过相同IP的节点，请勿重复添加'
+        })
+        setSavingNode(false)
+        return
+      }
+
+      // 2. Test connection before saving
+      const connRes = await api.testNodeConnection({
+        url: newNode.url,
+        base_path: newNode.base_path,
+        user: newNode.user,
+        pass: newNode.pass
+      })
+      if (!connRes.success) {
+        setClipToast({
+          show: true,
+          type: 'error',
+          message: '❌ ' + (connRes.msg || '连接失败')
+        })
+        setSavingNode(false)
+        return
+      }
+
+      // 3. Save node
       await api.saveNode(newNode)
-      setShowAdd(false)
-      setNewNode({ alias: "", url: "", base_path: "", user: "", pass: "" })
-      loadNodes()
-    } catch {}
+      setClipToast({
+        show: true,
+        type: 'success',
+        message: '✅ 节点添加成功！\n\n已成功连接到面板并保存节点'
+      })
+      setTimeout(() => {
+        setShowAdd(false)
+        setNewNode({ alias: "", url: "", base_path: "", user: "", pass: "" })
+        loadNodes()
+      }, 1500)
+    } catch (err: any) {
+      setClipToast({
+        show: true,
+        type: 'error',
+        message: '❌ 保存失败：' + (err?.message || '未知错误')
+      })
+    }
+    setSavingNode(false)
   }
 
   const handleDeleteNode = async (nodeId: string) => {
@@ -557,22 +627,6 @@ export default function UserDashboard() {
                   <h2 className="text-lg font-semibold text-slate-800">
                     {showDeploy ? "一键部署" : showAdd ? "添加节点" : "我的节点"}
                   </h2>
-                  {showDeploy && (
-                    <button
-                      onClick={() => { setShowDeploy(false) }}
-                      className="text-sm text-blue-500 hover:text-blue-700 mt-1"
-                    >
-                      ← 返回节点列表
-                    </button>
-                  )}
-                  {showAdd && !showDeploy && (
-                    <button
-                      onClick={() => { setShowAdd(false); if (selectedNode) openNodeDetail(selectedNode) }}
-                      className="text-sm text-blue-500 hover:text-blue-700 mt-1"
-                    >
-                      ← 返回节点列表
-                    </button>
-                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {!showAdd && !showDeploy && (
@@ -702,6 +756,9 @@ export default function UserDashboard() {
                       </div>
                     </div>
                     <div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-2 mb-2">
+                        <span className="text-sm text-blue-600">📋 粘贴板格式: IP:PORT:用户:密码 或 用户:密码:IP:PORT</span>
+                      </div>
                       <label className="text-sm font-medium text-slate-700 mb-2 block">SOCKS5 列表</label>
                       <textarea
                         className="w-full h-48 px-4 py-3 border border-slate-200 rounded-xl bg-white text-slate-800 font-mono text-sm"
@@ -709,7 +766,63 @@ export default function UserDashboard() {
                         value={socks5List}
                         onChange={(e) => setSocks5List(e.target.value)}
                       />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            const text = await navigator.clipboard.readText()
+                            const lines = text.split('\n').filter(l => l.trim())
+                            if (lines.length > 0) {
+                              setSocks5List(text)
+                              setDeployToast({
+                                show: true,
+                                type: 'success',
+                                message: '✅ 已扫描 ' + lines.length + ' 个账号\n\n已自动填充到列表，请检查格式是否正确'
+                              })
+                            } else {
+                              setDeployToast({
+                                show: true,
+                                type: 'error',
+                                message: '❌ 剪贴板为空或格式不正确'
+                              })
+                            }
+                          } catch {
+                            setDeployToast({
+                              show: true,
+                              type: 'error',
+                              message: '❌ 无法读取剪贴板，请手动粘贴'
+                            })
+                          }
+                        }}
+                        className="w-full mt-2 h-10 rounded-xl border-blue-200 text-blue-600 hover:bg-blue-50"
+                      >
+                        📋 扫描剪贴板自动填充
+                      </Button>
                     </div>
+                    {/* Deploy toast */}
+                  {deployToast.show && (
+                    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] px-4">
+                      <div className={`bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl ${deployToast.type === 'success' ? 'border-4 border-green-400' : 'border-4 border-red-400'}`}>
+                        <div className="text-center">
+                          <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${deployToast.type === 'success' ? 'bg-green-100' : 'bg-red-100'}`}>
+                            <span className="text-4xl font-bold ${deployToast.type === 'success' ? 'text-green-500' : 'text-red-500'}">{deployToast.type === 'success' ? '✓' : '✕'}</span>
+                          </div>
+                          <h3 className={`text-xl font-bold mb-3 ${deployToast.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                            {deployToast.type === 'success' ? '部署成功！' : '部署失败'}
+                          </h3>
+                          <p className="text-slate-700 text-base leading-relaxed whitespace-pre-line mb-6 font-medium">{deployToast.message}</p>
+                          <Button
+                            onClick={() => setDeployToast({...deployToast, show: false})}
+                            className={`w-full h-14 rounded-2xl text-lg font-bold ${deployToast.type === 'success' ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-slate-500 hover:bg-slate-600 text-white'}`}
+                          >
+                            确 定
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                     <Button
                       className="w-full bg-blue-500 hover:bg-blue-600 text-white h-12 rounded-xl"
                       onClick={handleDeploySocks5}
@@ -721,44 +834,143 @@ export default function UserDashboard() {
                 </div>
               ) : showAdd ? (
                 <form onSubmit={handleSaveNode} className="space-y-4">
-                  <Input
-                    placeholder="节点名称"
-                    value={newNode.alias}
-                    onChange={(e) => setNewNode({ ...newNode, alias: e.target.value })}
-                    required
-                    className="bg-white border-slate-200 rounded-xl h-12 text-slate-800"
-                  />
-                  <Input
-                    placeholder="面板地址 https://..."
-                    value={newNode.url}
-                    onChange={(e) => setNewNode({ ...newNode, url: e.target.value })}
-                    required
-                    className="bg-white border-slate-200 rounded-xl h-12 text-slate-800"
-                  />
-                  <Input
-                    placeholder="基础路径 如 /"
-                    value={newNode.base_path}
-                    onChange={(e) => setNewNode({ ...newNode, base_path: e.target.value })}
-                    required
-                    className="bg-white border-slate-200 rounded-xl h-12 text-slate-800"
-                  />
-                  <Input
-                    placeholder="面板用户名"
-                    value={newNode.user}
-                    onChange={(e) => setNewNode({ ...newNode, user: e.target.value })}
-                    required
-                    className="bg-white border-slate-200 rounded-xl h-12 text-slate-800"
-                  />
-                  <Input
-                    type="password"
-                    placeholder="面板密码"
-                    value={newNode.pass}
-                    onChange={(e) => setNewNode({ ...newNode, pass: e.target.value })}
-                    required
-                    className="bg-white border-slate-200 rounded-xl h-12 text-slate-800"
-                  />
+                  {/* Clipboard scan hint */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-2">
+                    <span className="text-sm text-blue-600">📋 剪贴板格式: URL/基础路径/用户名/密码</span>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-600 mb-1.5 block">节点名称 <span className="text-red-500">*</span></label>
+                    <Input
+                      placeholder="给自己起的节点名字"
+                      value={newNode.alias}
+                      onChange={(e) => setNewNode({ ...newNode, alias: e.target.value })}
+                      required
+                      className="bg-white border-slate-200 rounded-xl h-12 text-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-600 mb-1.5 block">面板地址 <span className="text-red-500">*</span></label>
+                    <Input
+                      placeholder="https://..."
+                      value={newNode.url}
+                      onChange={(e) => setNewNode({ ...newNode, url: e.target.value })}
+                      required
+                      className="bg-white border-slate-200 rounded-xl h-12 text-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-600 mb-1.5 block">基础路径 <span className="text-red-500">*</span></label>
+                    <Input
+                      placeholder="如 /PS2pN1BtGSSvqpNj08"
+                      value={newNode.base_path}
+                      onChange={(e) => setNewNode({ ...newNode, base_path: e.target.value })}
+                      required
+                      className="bg-white border-slate-200 rounded-xl h-12 text-slate-800"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm font-medium text-slate-600 mb-1.5 block">用户名 <span className="text-red-500">*</span></label>
+                      <Input
+                        placeholder="面板用户名"
+                        value={newNode.user}
+                        onChange={(e) => setNewNode({ ...newNode, user: e.target.value })}
+                        required
+                        className="bg-white border-slate-200 rounded-xl h-12 text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600 mb-1.5 block">密码 <span className="text-red-500">*</span></label>
+                      <Input
+                        type="password"
+                        placeholder="面板密码"
+                        value={newNode.pass}
+                        onChange={(e) => setNewNode({ ...newNode, pass: e.target.value })}
+                        required
+                        className="bg-white border-slate-200 rounded-xl h-12 text-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText()
+                        const parts = text.split('/')
+                        if (parts.length >= 4) {
+                          const urlParts = parts.slice(0, -3)
+                          const basePath = parts[parts.length - 3]
+                          const username = parts[parts.length - 2]
+                          const password = parts[parts.length - 1]
+                          const fullUrl = urlParts.join('/')
+                          try {
+                            const urlObj = new URL(fullUrl)
+                            setNewNode({
+                              alias: newNode.alias,
+                              url: urlObj.origin,
+                              base_path: '/' + basePath,
+                              user: username,
+                              pass: password
+                            })
+                          } catch {
+                            setNewNode({ ...newNode, base_path: '/' + basePath, user: username, pass: password })
+                          }
+                          setClipToast({
+                            show: true,
+                            type: 'success',
+                            message: '✅ 扫描成功！已自动填充表单\n\n💡 提示：格式为「地址/路径/用户名/密码」，复制时确保包含完整四部分'
+                          })
+                        } else {
+                          setClipToast({
+                            show: true,
+                            type: 'error',
+                            message: '❌ 格式错误：剪贴板内容不符合要求\n\n📋 正确格式：URL/基础路径/用户名/密码\n示例：https://example.com/abc/user/pass'
+                          })
+                        }
+                      } catch {
+                        setClipToast({
+                          show: true,
+                          type: 'error',
+                          message: '❌ 无法读取剪贴板，请手动粘贴'
+                        })
+                      }
+                    }}
+                    className="w-full h-10 rounded-xl border-blue-200 text-blue-600 hover:bg-blue-50"
+                  >
+                    📋 扫描剪贴板自动填充
+                  </Button>
+
+                  {/* Clipboard toast */}
+                  {clipToast.show && (
+                    <div className={`fixed inset-0 bg-black/60 flex items-center justify-center z-[100] px-4`}>
+                      <div className={`bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl ${clipToast.type === 'success' ? 'border-4 border-green-400' : 'border-4 border-red-400'}`}>
+                        <div className="text-center">
+                          <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${clipToast.type === 'success' ? 'bg-green-100' : 'bg-red-100'}`}>
+                            <span className="text-4xl font-bold ${clipToast.type === 'success' ? 'text-green-500' : 'text-red-500'}">{clipToast.type === 'success' ? '✓' : '✕'}</span>
+                          </div>
+                          <h3 className={`text-xl font-bold mb-3 ${clipToast.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                            {clipToast.type === 'success' ? '扫描成功！' : '格式错误'}
+                          </h3>
+                          <p className="text-slate-700 text-base leading-relaxed whitespace-pre-line mb-6 font-medium">{clipToast.message}</p>
+                          <Button
+                            onClick={() => setClipToast({...clipToast, show: false})}
+                            className={`w-full h-14 rounded-2xl text-lg font-bold ${clipToast.type === 'success' ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-slate-500 hover:bg-slate-600 text-white'}`}
+                          >
+                            确 定
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex gap-3">
-                    <Button type="submit" className="flex-1 bg-blue-500 hover:bg-blue-600 text-white h-12 rounded-xl">保存</Button>
+                    <Button type="submit" disabled={savingNode} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white h-12 rounded-xl">{savingNode ? "检测中..." : "保存"}</Button>
                     <Button type="button" variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-12 rounded-xl">取消</Button>
                   </div>
                 </form>
@@ -780,7 +992,7 @@ export default function UserDashboard() {
                     <div
                       key={id}
                       onClick={() => selectedNode === id ? (setSelectedNode(null), setNodeDetail(null)) : openNodeDetail(id)}
-                      className={`p-4 rounded-xl border cursor-pointer transition-all ${selectedNode === id ? "border-blue-400 bg-blue-50" : "border-slate-200 hover:border-blue-300 hover:bg-blue-50/30"}`}
+                      className={`p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:shadow-lg hover:shadow-blue-100 hover:-translate-y-0.5 ${selectedNode === id ? "border-blue-400 bg-blue-50 shadow-md shadow-blue-100" : "border-slate-200 bg-white hover:border-blue-300"}`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -840,11 +1052,11 @@ export default function UserDashboard() {
                       </div>
                     ) : (
                       nodeDetail.inbounds.map((inbound) => (
-                        <div key={inbound.id} className="border border-slate-200 rounded-xl p-4">
-                          <div className="flex items-center justify-between mb-3">
+                        <div key={inbound.id} className="border border-slate-200 rounded-2xl p-4 hover:shadow-md transition-all duration-200">
+                          <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-slate-800">{inbound.remark || "入站 " + inbound.id}</span>
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-600">{inbound.protocol || "未知"}</span>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-600">{(inbound.protocol || "未知").toUpperCase()}</span>
                               <span className={`text-xs px-2 py-0.5 rounded-full ${inbound.enable ? "bg-green-100 text-green-600" : "bg-slate-100 text-slate-400"}`}>
                                 {inbound.enable ? "启用" : "禁用"}
                               </span>
@@ -861,7 +1073,7 @@ export default function UserDashboard() {
                           {/* Connection Info */}
                           <div className="grid grid-cols-2 gap-2 mb-3">
                             <div className="bg-slate-50 rounded-lg p-2.5">
-                              <p className="text-xs text-slate-400 mb-0.5">地址</p>
+                              <p className="text-xs text-slate-500 mb-1">服务器地址</p>
                               <div className="flex items-center gap-1">
                                 <p className="text-sm font-mono text-slate-700 truncate flex-1">{inbound.address || nodeDetail.host.replace(/^https?:\/\//, "")}</p>
                                 <button onClick={() => copyToClipboard(inbound.address || nodeDetail.host, `addr-${inbound.id}`)} className="text-slate-400 hover:text-blue-500 flex-shrink-0">
@@ -882,13 +1094,13 @@ export default function UserDashboard() {
 
                           {/* Traffic */}
                           <div className="grid grid-cols-2 gap-2 mb-3">
-                            <div className="bg-green-50 rounded-lg p-2.5">
-                              <p className="text-xs text-green-500 mb-0.5">已上传</p>
-                              <p className="text-sm font-medium text-green-700">{formatBytes(inbound.up)}</p>
+                            <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-3">
+                              <p className="text-xs text-green-600 mb-1">已上传</p>
+                              <p className="text-base font-semibold text-green-700">{formatBytes(inbound.up)}</p>
                             </div>
-                            <div className="bg-blue-50 rounded-lg p-2.5">
-                              <p className="text-xs text-blue-500 mb-0.5">已下载</p>
-                              <p className="text-sm font-medium text-blue-700">{formatBytes(inbound.down)}</p>
+                            <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-3">
+                              <p className="text-xs text-blue-600 mb-1">已下载</p>
+                              <p className="text-base font-semibold text-blue-700">{formatBytes(inbound.down)}</p>
                             </div>
                           </div>
 

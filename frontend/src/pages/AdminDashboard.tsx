@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { api, adminApi, userApi, systemApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { LogOut, RefreshCw, Wifi, X, Check, Copy, CheckCircle2, XCircle, Trash2, Menu, ChevronLeft, Server, Users, Settings, Rocket, Plus } from "lucide-react";
+import { LogOut, RefreshCw, Wifi, X, Check, Copy, CheckCircle2, XCircle, Trash2, Menu, ChevronLeft, Server, Users, Settings, Rocket, Plus, FileText } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
 interface DashboardStats {
@@ -117,7 +117,7 @@ function generateLink(inbound: Inbound, host: string, clientUuid: string, remark
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState<{ username: string; is_admin: boolean } | null>(null);
-  const [currentView, setCurrentView] = useState<"dashboard" | "users" | "settings" | "nodes">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "users" | "settings" | "nodes" | "audit">("dashboard");
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
   const [systemLoading, setSystemLoading] = useState(false);
@@ -147,6 +147,32 @@ export default function AdminDashboard() {
   const [nodeToDelete, setNodeToDelete] = useState<string | null>(null);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  // Audit logs state
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditPageSize, setAuditPageSize] = useState(50);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditActionFilter, setAuditActionFilter] = useState<string>("");
+  const [showClearAuditModal, setShowClearAuditModal] = useState(false);
+  const [clearAuditLoading, setClearAuditLoading] = useState(false);
+
+  const fetchAuditLogs = async (page: number = auditPage) => {
+    setAuditLoading(true);
+    try {
+      const params: any = { page: page, page_size: auditPageSize };
+      if (auditActionFilter) params.action = auditActionFilter;
+      const res = await adminApi.getAuditLogs(params);
+      if (res.code === 0 && res.data) {
+        setAuditLogs(res.data.logs || []);
+        setAuditTotal(res.data.total || 0);
+      }
+    } catch (err) {
+      console.error("Failed to fetch audit logs:", err);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
 
   const fetchDashboard = async () => {
     try {
@@ -210,6 +236,12 @@ export default function AdminDashboard() {
       loadNodes();
     }
   }, [currentView]);
+
+  useEffect(() => {
+    if (currentView === "audit") {
+      fetchAuditLogs(auditPage);
+    }
+  }, [currentView, auditPage, auditActionFilter]);
 
   const handleLogout = async () => {
     await api.logout();
@@ -578,6 +610,13 @@ export default function AdminDashboard() {
               <Settings className="w-5 h-5" />
               {sidebarOpen && <span>系统设置</span>}
             </button>
+            <button
+              onClick={() => { setCurrentView("audit"); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentView === "audit" ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-100"}`}
+            >
+              <FileText className="w-5 h-5" />
+              {sidebarOpen && <span>审计日志</span>}
+            </button>
           </div>
         </nav>
 
@@ -628,6 +667,7 @@ export default function AdminDashboard() {
                   {currentView === "users" && "用户列表"}
                   {currentView === "settings" && "系统设置"}
                   {currentView === "nodes" && "我的节点"}
+                  {currentView === "audit" && "审计日志"}
                 </h2>
                 <Button variant="ghost" size="sm" onClick={async () => { setLoading(true); setSystemLoading(true); await Promise.all([fetchDashboard().catch(() => {}), fetchSystemStats().catch(() => {})]); setLoading(false); setSystemLoading(false); }} className={`text-slate-400 hover:text-blue-600 h-8 px-3 ${currentView === "nodes" ? "hidden" : ""}`}>
                   <RefreshCw className={`w-4 h-4 ${loading || systemLoading ? "animate-spin" : ""}`} />
@@ -837,6 +877,183 @@ export default function AdminDashboard() {
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Audit View */}
+              {currentView === "audit" && (
+                <div className="flex flex-col h-[calc(100vh-12rem)]">
+                  {/* Filters */}
+                  <div className="flex flex-wrap items-center gap-3 p-4 bg-slate-50 rounded-xl flex-shrink-0">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-slate-600">操作类型:</label>
+                      <select
+                        value={auditActionFilter}
+                        onChange={(e) => { setAuditActionFilter(e.target.value); setAuditPage(1); }}
+                        className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">全部</option>
+                        <option value="register">注册</option>
+                        <option value="login_success">登录成功</option>
+                        <option value="login_failed">登录失败</option>
+                        <option value="logout">注销</option>
+                        <option value="create_node">创建节点</option>
+                        <option value="admin_toggle_register">开关注册</option>
+                        <option value="admin_toggle_user">禁用用户</option>
+                        <option value="admin_delete_user">删除用户</option>
+                        <option value="admin_delete_node">删除节点(管理)</option>
+                        <option value="user_delete_node">删除节点(用户)</option>
+                      </select>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fetchAuditLogs()}
+                      disabled={auditLoading}
+                    >
+                      <RefreshCw className={`w-4 h-4 mr-1 ${auditLoading ? "animate-spin" : ""}`} />
+                      刷新
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowClearAuditModal(true)}
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                    >
+                      清除全部
+                    </Button>
+                  </div>
+
+                  {/* Clear Audit Modal */}
+                  {showClearAuditModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                      <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                            <Trash2 className="w-6 h-6 text-red-600" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-slate-800">清除审计日志</h3>
+                            <p className="text-sm text-slate-500">此操作不可恢复</p>
+                          </div>
+                        </div>
+                        <p className="text-slate-600 mb-6">
+                          确定要清除所有审计日志吗？清除后数据将无法恢复。
+                        </p>
+                        <div className="flex justify-end gap-3">
+                          <Button
+                            variant="outline"
+                            onClick={() => setShowClearAuditModal(false)}
+                            disabled={clearAuditLoading}
+                          >
+                            取消
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              setClearAuditLoading(true);
+                              adminApi.clearAuditLogs(0).then(() => {
+                                setShowClearAuditModal(false);
+                                fetchAuditLogs();
+                              }).catch(() => alert("清除失败")).finally(() => setClearAuditLoading(false));
+                            }}
+                            className="bg-red-600 hover:bg-red-700"
+                          >
+                            {clearAuditLoading ? "清除中..." : "确认清除"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Audit Logs Table */}
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <div className="h-full overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200">
+                            <th className="text-left py-3 px-4 font-medium text-slate-600">时间</th>
+                            <th className="text-left py-3 px-4 font-medium text-slate-600">用户</th>
+                            <th className="text-left py-3 px-4 font-medium text-slate-600">操作</th>
+                            <th className="text-left py-3 px-4 font-medium text-slate-600">IP</th>
+                            <th className="text-left py-3 px-4 font-medium text-slate-600">详情</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                        {auditLogs.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="text-center py-8 text-slate-400">暂无数据</td>
+                          </tr>
+                        ) : (
+                          auditLogs.map((log: any) => (
+                            <tr key={log.id} className="border-b border-slate-100 hover:bg-slate-50">
+                              <td className="py-3 px-4 text-slate-600">{log.created_at}</td>
+                              <td className="py-3 px-4">
+                                <span className="font-medium text-slate-800">{log.username || "-"}</span>
+                                {log.user_id > 0 && <span className="text-slate-400 text-xs ml-1">(#{log.user_id})</span>}
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  log.action === "login_success" ? "bg-green-100 text-green-700" :
+                                  log.action === "login_failed" ? "bg-red-100 text-red-700" :
+                                  log.action === "register" ? "bg-blue-100 text-blue-700" :
+                                  log.action === "logout" ? "bg-slate-100 text-slate-700" :
+                                  log.action === "create_node" ? "bg-purple-100 text-purple-700" :
+                                  log.action.includes("admin") ? "bg-orange-100 text-orange-700" :
+                                  "bg-slate-100 text-slate-700"
+                                }`}>
+                                  {log.action}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-slate-600 font-mono text-xs">{log.ip || "-"}</td>
+                              <td className="py-3 px-4 text-slate-600 text-xs">
+                                {log.details ? (
+                                  <pre className="bg-slate-100 rounded p-1 text-xs overflow-x-auto max-w-xs">
+                                    {JSON.stringify(log.details, null, 2)}
+                                  </pre>
+                                ) : "-"}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                    </div>
+                  </div>
+
+                  {/* Pagination */}
+                  {auditTotal > 0 && (
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+                      <p className="text-sm text-slate-500">
+                        共 {auditTotal} 条记录，第 {auditPage} / {Math.ceil(auditTotal / auditPageSize)} 页
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const newPage = Math.max(1, auditPage - 1);
+                            setAuditPage(newPage);
+                            fetchAuditLogs(newPage);
+                          }}
+                          disabled={auditPage <= 1 || auditLoading}
+                        >
+                          上一页
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const newPage = auditPage + 1;
+                            setAuditPage(newPage);
+                            fetchAuditLogs(newPage);
+                          }}
+                          disabled={auditPage >= Math.ceil(auditTotal / auditPageSize) || auditLoading}
+                        >
+                          下一页
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

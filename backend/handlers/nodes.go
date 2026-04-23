@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"log"
 	"strconv"
-	"xhub/cache"
 	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"xhub/cache"
+	"xhub/crypto"
 	"xhub/database"
 )
 
@@ -23,15 +25,71 @@ func SavePrivateNode(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "msg": "参数不完整"})
 		return
 	}
-	_, err := database.DB.Exec(
+	// S-03: Encrypt panel password before saving
+	encryptedPass, _ := crypto.Encrypt(node.Pass)
+	result, err := database.DB.Exec(
 		"INSERT INTO private_nodes (user_id, alias_name, url, base_path, panel_user, panel_pass) VALUES ($1, $2, $3, $4, $5, $6)",
-		userID, node.Alias, node.URL, node.BasePath, node.User, node.Pass,
+		userID, node.Alias, node.URL, node.BasePath, node.User, encryptedPass,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "msg": "保存失败"})
 		return
 	}
+	// B-05: Audit log - node created
+	nodeID, _ := result.LastInsertId()
+	var username string
+	database.DB.QueryRow("SELECT username FROM users WHERE id=$1", userID).Scan(&username)
+	database.LogAudit(userID, username, "create_node", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"node_id": nodeID, "alias": node.Alias, "url": node.URL})
 	c.JSON(http.StatusOK, gin.H{"success": true, "msg": "节点已保存"})
+}
+
+// Check if user already has a node with the same IP
+func CheckNodeDuplicate(c *gin.Context) {
+	userID := c.GetInt("user_id")
+	var req struct {
+		URL string `json:"url"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "msg": "参数错误"})
+		return
+	}
+
+	log.Printf("DEBUG CheckNodeDuplicate: input URL=%s, userID=%d", req.URL, userID)
+
+	// Extract host from URL (remove protocol and port)
+	host := req.URL
+	if len(host) > 8 && host[:8] == "https://" {
+		host = host[8:]
+	} else if len(host) > 7 && host[:7] == "http://" {
+		host = host[7:]
+	}
+	// Remove port and path
+	for i := 0; i < len(host); i++ {
+		if host[i] == ':' || host[i] == '/' {
+			host = host[:i]
+			break
+		}
+	}
+	log.Printf("DEBUG CheckNodeDuplicate: extracted host=%s", host)
+
+	// Check if user already has this IP - simplified query
+	var count int
+	err := database.DB.QueryRow(
+		"SELECT COUNT(*) FROM private_nodes WHERE user_id=$1 AND url LIKE $2",
+		userID, "%"+host+"%",
+	).Scan(&count)
+	log.Printf("DEBUG CheckNodeDuplicate: query count=%d", count)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "msg": "查询失败"})
+		return
+	}
+
+	if count > 0 {
+		c.JSON(http.StatusOK, gin.H{"duplicate": true, "msg": "该节点已添加"})
+	} else {
+		c.JSON(http.StatusOK, gin.H{"duplicate": false, "msg": "无重复"})
+	}
 }
 
 func GetNodes(c *gin.Context) {
@@ -72,7 +130,9 @@ func GetAdminDashboard(c *gin.Context) {
 		var pid int
 		var uname, alias, purl, ppath, puser, ppass string
 		rows2.Scan(&pid, &uname, &alias, &purl, &ppath, &puser, &ppass)
-		pnodes = append(pnodes, gin.H{"id": pid, "username": uname, "alias": alias, "url": purl, "base_path": ppath, "panel_user": puser, "panel_pass": ppass})
+		// S-03: Decrypt panel password when reading
+		decryptedPass, _ := crypto.Decrypt(ppass)
+		pnodes = append(pnodes, gin.H{"id": pid, "username": uname, "alias": alias, "url": purl, "base_path": ppath, "panel_user": puser, "panel_pass": decryptedPass})
 	}
 	rows2.Close()
 
@@ -103,19 +163,34 @@ func AdminAction(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "msg": "无权限"})
 		return
 	}
+	var adminUsername string
+	database.DB.QueryRow("SELECT username FROM users WHERE id=$1", userID).Scan(&adminUsername)
+
 	var req struct {
 		Action string `json:"action"`
 		ID     int    `json:"id"`
 	}
 	c.ShouldBindJSON(&req)
 	if req.Action == "delete_user" {
+		// Get username before deletion for audit log
+		var targetUsername string
+		database.DB.QueryRow("SELECT username FROM users WHERE id=$1", req.ID).Scan(&targetUsername)
+
 		// Delete user's session from cache
 		cache.Del("session:" + strconv.Itoa(req.ID))
 		database.DB.Exec("DELETE FROM private_nodes WHERE user_id=$1", req.ID)
 		database.DB.Exec("DELETE FROM users WHERE id=$1", req.ID)
+		// B-05: Audit log - admin delete user
+		database.LogAudit(userID, adminUsername, "admin_delete_user", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"target_user_id": req.ID, "target_username": targetUsername})
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "用户已删除"})
 	} else if req.Action == "delete_node" {
+		// Get node info before deletion for audit log
+		var nodeAlias, nodeURL string
+		database.DB.QueryRow("SELECT alias_name, url FROM private_nodes WHERE id=$1", req.ID).Scan(&nodeAlias, &nodeURL)
+
 		database.DB.Exec("DELETE FROM private_nodes WHERE id=$1", req.ID)
+		// B-05: Audit log - admin delete node
+		database.LogAudit(userID, adminUsername, "admin_delete_node", c.ClientIP(), c.GetHeader("User-Agent"), map[string]interface{}{"node_id": req.ID, "alias": nodeAlias, "url": nodeURL})
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "节点已删除"})
 	} else {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "msg": "未知操作"})
