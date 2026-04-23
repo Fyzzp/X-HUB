@@ -43,8 +43,8 @@ git clone https://github.com/Fyzzp/X-HUB.git
 cd X-HUB
 
 # 运行部署脚本
-chmod +x deploy.sh
-./deploy.sh
+chmod +x install.sh
+./install.sh
 ```
 
 ## 配置说明
@@ -123,7 +123,7 @@ X-HUB/
 │   │   ├── components/ # UI 组件
 │   │   └── lib/      # API 工具函数
 │   └── dist/         # 构建产物
-├── deploy.sh         # 一键部署脚本
+├── install.sh         # 一键部署脚本
 ├── config.json.example # 配置模板
 └── README.md
 ```
