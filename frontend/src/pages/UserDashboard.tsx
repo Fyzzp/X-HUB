@@ -514,7 +514,7 @@ export default function UserDashboard() {
               className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${sidebarTab === "nodes" ? "bg-blue-50 text-blue-600 shadow-sm" : "text-slate-600 hover:bg-slate-100"} relative`}
             >
               <Wifi className="w-5 h-5" />
-              {sidebarOpen && <span className="flex-1 text-center flex items-center justify-center gap-1">我的节点 {nodeCount > 0 && <span className="w-5 h-5 bg-blue-500 text-white text-xs rounded-full inline-flex items-center justify-center font-bold flex-shrink-0">{nodeCount}</span>}</span>}
+              {sidebarOpen && <span className="flex-1 text-center">我的节点</span>}{nodeCount > 0 && <span className="w-5 h-5 bg-blue-500 text-white text-xs rounded-full inline-flex items-center justify-center font-bold flex-shrink-0 mr-1">{nodeCount}</span>}
               {!sidebarOpen && <span className="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-200">我的节点{nodeCount > 0 ? `(${nodeCount})` : ""}</span>}
             </button>
             <button
