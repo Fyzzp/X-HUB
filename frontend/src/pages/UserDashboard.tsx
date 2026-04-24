@@ -118,6 +118,7 @@ export default function UserDashboard() {
 
   // Sidebar
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarTab, setSidebarTab] = useState<"nodes" | "add" | "deploy">("nodes")
 
   // Node detail - now inline instead of modal
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
@@ -509,25 +510,28 @@ export default function UserDashboard() {
         <nav className="flex-1 py-4">
           <div className="px-3 space-y-1">
             <button
-              onClick={() => { setShowAdd(false); setShowDeploy(false); if (selectedNode) openNodeDetail(selectedNode) }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${!showAdd && !showDeploy ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-100"}`}
+              onClick={() => { setSidebarTab("nodes"); setShowAdd(false); setShowDeploy(false); if (selectedNode) openNodeDetail(selectedNode) }}
+              className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${sidebarTab === "nodes" ? "bg-blue-50 text-blue-600 shadow-sm" : "text-slate-600 hover:bg-slate-100"} relative`}
             >
               <Wifi className="w-5 h-5" />
-              {sidebarOpen && <span>我的节点</span>}
+              {sidebarOpen && <span>我的节点 {nodeCount > 0 && <span className="ml-1 w-5 h-5 bg-blue-500 text-white text-xs rounded-full inline-flex items-center justify-center font-bold">{nodeCount}</span>}</span>}
+              {!sidebarOpen && <span className="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-200">我的节点{nodeCount > 0 ? `(${nodeCount})` : ""}</span>}
             </button>
             <button
-              onClick={() => { setShowAdd(true); setShowDeploy(false); setSelectedNode(null); setNodeDetail(null) }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${showAdd ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-100"}`}
+              onClick={() => { setSidebarTab("add"); setShowAdd(true); setShowDeploy(false); setSelectedNode(null); setNodeDetail(null) }}
+              className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${sidebarTab === "add" ? "bg-blue-50 text-blue-600 shadow-sm" : "text-slate-600 hover:bg-slate-100"} relative`}
             >
               <Plus className="w-5 h-5" />
               {sidebarOpen && <span>添加节点</span>}
+              {!sidebarOpen && <span className="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-200">添加节点</span>}
             </button>
             <button
-              onClick={() => { setShowDeploy(true); setShowAdd(false); setSelectedNode(null); setNodeDetail(null) }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${showDeploy ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-100"}`}
+              onClick={() => { setSidebarTab("deploy"); setShowDeploy(true); setShowAdd(false); setSelectedNode(null); setNodeDetail(null) }}
+              className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${sidebarTab === "deploy" ? "bg-blue-50 text-blue-600 shadow-sm" : "text-slate-600 hover:bg-slate-100"} relative`}
             >
               <Rocket className="w-5 h-5" />
               {sidebarOpen && <span>一键部署</span>}
+              {!sidebarOpen && <span className="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity duration-200">一键部署</span>}
             </button>
           </div>
         </nav>
@@ -548,76 +552,45 @@ export default function UserDashboard() {
         </div>
       </aside>
 
-      {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 shadow-sm z-50 flex items-center px-4">
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 z-50 flex items-center shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
         <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-2 -ml-2 text-slate-500 hover:text-slate-700"
+          onClick={() => { setSidebarTab("nodes"); setShowAdd(false); setShowDeploy(false); if (selectedNode) openNodeDetail(selectedNode) }}
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 h-full transition-colors ${sidebarTab === "nodes" ? "text-blue-600" : "text-slate-400"}`}
         >
-          {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          <div className="relative">
+            <Wifi className="w-6 h-6" />
+            {nodeCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-blue-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">{nodeCount}</span>
+            )}
+          </div>
+          <span className="text-[11px] font-medium">我的节点</span>
         </button>
-        <div className="flex items-center gap-2 ml-2">
-          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <span className="text-base font-bold text-slate-800">X-HUB</span>
-        </div>
-        <span className="ml-auto text-sm text-slate-500">{user?.username}</span>
-      </header>
+        <button
+          onClick={() => { setSidebarTab("add"); setShowAdd(true); setShowDeploy(false); setSelectedNode(null); setNodeDetail(null) }}
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 h-full transition-colors ${sidebarTab === "add" ? "text-blue-600" : "text-slate-400"}`}
+        >
+          <Plus className="w-6 h-6" />
+          <span className="text-[11px] font-medium">添加节点</span>
+        </button>
+        <button
+          onClick={() => { setSidebarTab("deploy"); setShowDeploy(true); setShowAdd(false); setSelectedNode(null); setNodeDetail(null) }}
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 h-full transition-colors ${sidebarTab === "deploy" ? "text-blue-600" : "text-slate-400"}`}
+        >
+          <Rocket className="w-6 h-6" />
+          <span className="text-[11px] font-medium">一键部署</span>
+        </button>
+        <button
+          onClick={handleLogout}
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 h-full text-red-400"
+        >
+          <LogOut className="w-6 h-6" />
+          <span className="text-[11px] font-medium">退出</span>
+        </button>
+      </nav>
 
-      {/* Mobile Sidebar Overlay */}
-      {sidebarOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-40"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Mobile Sidebar */}
-      <aside className={`lg:hidden fixed top-0 left-0 bottom-0 w-64 bg-white z-50 transform transition-transform duration-300 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="h-16 border-b border-slate-200 flex items-center px-4 gap-3">
-          <div className="w-9 h-9 bg-blue-500 rounded-xl flex items-center justify-center">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <span className="text-lg font-bold text-slate-800">X-HUB</span>
-        </div>
-        <nav className="py-4 px-3 space-y-1">
-          <button
-            onClick={() => { setShowAdd(false); setShowDeploy(false); setSidebarOpen(false); if (selectedNode) openNodeDetail(selectedNode) }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${!showAdd && !showDeploy ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-100"}`}
-          >
-            <Wifi className="w-5 h-5" />
-            <span>我的节点</span>
-          </button>
-          <button
-            onClick={() => { setShowAdd(true); setShowDeploy(false); setSelectedNode(null); setNodeDetail(null); setSidebarOpen(false) }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${showAdd ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-100"}`}
-          >
-            <Plus className="w-5 h-5" />
-            <span>添加节点</span>
-          </button>
-          <button
-            onClick={() => { setShowDeploy(true); setShowAdd(false); setSelectedNode(null); setNodeDetail(null); setSidebarOpen(false) }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${showDeploy ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-100"}`}
-          >
-            <Rocket className="w-5 h-5" />
-            <span>一键部署</span>
-          </button>
-        </nav>
-        <div className="absolute bottom-4 left-0 right-0 px-4">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 text-red-500 hover:bg-red-50 rounded-xl text-sm font-medium">
-            <LogOut className="w-5 h-5" />
-            <span>退出登录</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 lg:p-6 pt-20 lg:pt-6 min-h-screen">
+{/* Main Content */}
+      <main className="flex-1 lg:p-6 pt-20 pb-20 lg:pt-6 lg:pb-6 min-h-screen transition-all duration-300">
         <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-7rem)] lg:h-[calc(100vh-3rem)]">
           {/* Left: Node List */}
           <div className={`${selectedNode && !showAdd ? "hidden lg:block lg:w-1/2" : "w-full lg:w-full"} flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden`}>
