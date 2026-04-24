@@ -72,20 +72,45 @@ func CheckNodeDuplicate(c *gin.Context) {
 	}
 	log.Printf("DEBUG CheckNodeDuplicate: extracted host=%s", host)
 
-	// Check if user already has this IP - simplified query
-	var count int
-	err := database.DB.QueryRow(
-		"SELECT COUNT(*) FROM private_nodes WHERE user_id=$1 AND url LIKE $2",
-		userID, "%"+host+"%",
-	).Scan(&count)
-	log.Printf("DEBUG CheckNodeDuplicate: query count=%d", count)
-
+	// Extract host from stored URLs and compare exactly
+	rows, err := database.DB.Query(
+		"SELECT id, url FROM private_nodes WHERE user_id=$1", userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "msg": "查询失败"})
 		return
 	}
+	defer rows.Close()
 
-	if count > 0 {
+	duplicate := false
+	for rows.Next() {
+		var id int
+		var storedURL string
+		if err := rows.Scan(&id, &storedURL); err != nil {
+			continue
+		}
+		// Extract host from stored URL
+		storedHost := storedURL
+		if len(storedHost) > 8 && storedHost[:8] == "https://" {
+			storedHost = storedHost[8:]
+		} else if len(storedHost) > 7 && storedHost[:7] == "http://" {
+			storedHost = storedHost[7:]
+		}
+		for i := 0; i < len(storedHost); i++ {
+			if storedHost[i] == ':' || storedHost[i] == '/' {
+				storedHost = storedHost[:i]
+				break
+			}
+		}
+		log.Printf("DEBUG CheckNodeDuplicate: comparing input=%s with stored=%s", host, storedHost)
+		if storedHost == host {
+			duplicate = true
+			break
+		}
+	}
+
+	log.Printf("DEBUG CheckNodeDuplicate: duplicate=%v", duplicate)
+
+	if duplicate {
 		c.JSON(http.StatusOK, gin.H{"duplicate": true, "msg": "该节点已添加"})
 	} else {
 		c.JSON(http.StatusOK, gin.H{"duplicate": false, "msg": "无重复"})
