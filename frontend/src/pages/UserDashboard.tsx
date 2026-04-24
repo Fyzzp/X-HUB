@@ -511,7 +511,7 @@ export default function UserDashboard() {
           <div className="px-3 space-y-1">
             <button
               onClick={() => { setSidebarTab("nodes"); setShowAdd(false); setShowDeploy(false); if (selectedNode) openNodeDetail(selectedNode) }}
-              className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${sidebarTab === "nodes" ? "bg-blue-50 text-blue-600 shadow-sm" : "text-slate-600 hover:bg-slate-100"} relative`}
+              className={`group w-full flex items-center gap-3 px-3 py-[30px] rounded-xl text-sm font-medium transition-all duration-300 ${sidebarTab === "nodes" ? "bg-blue-50 text-blue-600 shadow-sm" : "text-slate-600 hover:bg-slate-100"} relative`}
             >
               <Wifi className="w-5 h-5" />
               {sidebarOpen && <span className="flex-1 flex items-center justify-center gap-1">我的节点{nodeCount > 0 && <span className="ml-2 w-5 h-5 bg-blue-500 text-white text-xs rounded-full inline-flex items-center justify-center font-bold flex-shrink-0">{nodeCount}</span>}</span>}
@@ -519,7 +519,7 @@ export default function UserDashboard() {
             </button>
             <button
               onClick={() => { setSidebarTab("add"); setShowAdd(true); setShowDeploy(false); setSelectedNode(null); setNodeDetail(null) }}
-              className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${sidebarTab === "add" ? "bg-blue-50 text-blue-600 shadow-sm" : "text-slate-600 hover:bg-slate-100"} relative`}
+              className={`group w-full flex items-center gap-3 px-3 py-[30px] rounded-xl text-sm font-medium transition-all duration-300 ${sidebarTab === "add" ? "bg-blue-50 text-blue-600 shadow-sm" : "text-slate-600 hover:bg-slate-100"} relative`}
             >
               <Plus className="w-5 h-5" />
               {sidebarOpen && <span className="flex-1 text-center">添加节点</span>}
@@ -527,7 +527,7 @@ export default function UserDashboard() {
             </button>
             <button
               onClick={() => { setSidebarTab("deploy"); setShowDeploy(true); setShowAdd(false); setSelectedNode(null); setNodeDetail(null) }}
-              className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${sidebarTab === "deploy" ? "bg-blue-50 text-blue-600 shadow-sm" : "text-slate-600 hover:bg-slate-100"} relative`}
+              className={`group w-full flex items-center gap-3 px-3 py-[30px] rounded-xl text-sm font-medium transition-all duration-300 ${sidebarTab === "deploy" ? "bg-blue-50 text-blue-600 shadow-sm" : "text-slate-600 hover:bg-slate-100"} relative`}
             >
               <Rocket className="w-5 h-5" />
               {sidebarOpen && <span className="flex-1 text-center">一键部署</span>}
